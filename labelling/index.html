@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+   <meta charset="utf-8" />
+   <meta name="viewport" content="width=device-width,initial-scale=1" />
+   <title>Labelling</title>
+
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+   <style>
+      :root {
+         font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial;
+      }
+
+      body {
+         max-width: 1000px;
+         margin: 28px auto;
+         padding: 18px;
+         line-height: 1.45;
+         color: #111;
+         background: #f7f9fb;
+      }
+
+      header {
+         display: flex;
+         align-items: center;
+         justify-content: space-between;
+         margin-bottom: 14px
+      }
+
+      h1 {
+         font-size: 20px;
+         margin: 0
+      }
+
+      .meta {
+         font-size: 13px;
+         color: #444
+      }
+
+      .card {
+         background: white;
+         border-radius: 8px;
+         padding: 18px;
+         box-shadow: 0 6px 18px rgba(20, 30, 40, 0.06)
+      }
+
+      .row {
+         display: flex;
+         gap: 12px;
+         align-items: center
+      }
+
+      .link {
+         word-break: break-all;
+         color: #0a66c2
+      }
+
+      #markdown {
+         margin-top: 12px;
+         border-radius: 6px;
+         padding: 16px;
+         background: #fcfdff;
+         border: 1px solid #eef3ff;
+         max-height: 520px;
+         overflow: auto
+      }
+
+      form {
+         margin-top: 14px;
+         display: flex;
+         flex-direction: column;
+         gap: 8px
+      }
+
+      textarea {
+         min-height: 110px;
+         padding: 10px;
+         border-radius: 6px;
+         border: 1px solid #d7dce8;
+         resize: vertical;
+         font-family: inherit
+      }
+
+      .controls {
+         display: flex;
+         gap: 8px;
+         align-items: center
+      }
+
+      button {
+         background: #0a66c2;
+         color: white;
+         border: 0;
+         padding: 8px 12px;
+         border-radius: 6px;
+         cursor: pointer
+      }
+
+      button.secondary {
+         background: #f1f5f9;
+         color: #0b1220
+      }
+
+      .small {
+         font-size: 13px;
+         color: #555
+      }
+
+      .tags {
+         font-size: 13px;
+         color: #333
+      }
+
+      .spinner {
+         width: 18px;
+         height: 18px;
+         border: 2px solid rgba(0, 0, 0, 0.12);
+         border-top-color: #0a66c2;
+         border-radius: 50%;
+         animation: spin 0.9s linear infinite;
+         display: inline-block
+      }
+
+      @keyframes spin {
+         to {
+            transform: rotate(360deg)
+         }
+      }
+
+      #progressWrap {
+         max-width: 100%;
+      }
+
+      #progressLabel {
+         font-weight: 600;
+      }
+
+      footer {
+         margin-top: 18px;
+         font-size: 13px;
+         color: #666
+      }
+   </style>
+
+   <!-- Marked for markdown rendering and DOMPurify for sanitization -->
+   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.0/purify.min.js"></script>
+</head>
+
+<body>
+   <header>
+      <div>
+         <h1>Labelling</h1>
+         <div class="meta">Auto loads next item from the server and posts summaries</div>
+      </div>
+      <div class="small">Server: <strong>http://localhost:5000</strong></div>
+   </header>
+
+   <div class="card" id="card">
+      <div id="status" class="small">Loading next item <span class="spinner" id="spinner"></span></div>
+
+      <div id="item" style="display:none;">
+         <div style="margin-top:10px">
+            <div class="small"><strong>Title</strong></div>
+            <div id="title" style="font-weight:600;margin-bottom:6px"></div>
+
+            <div class="small"><strong>Source link</strong></div>
+            <div class="link" id="link"></div>
+
+            <div style="display:flex;gap:18px;margin-top:10px;align-items:center">
+               <div class="small"><strong>Tags</strong></div>
+               <div class="tags" id="tags"></div>
+               <div style="margin-left:auto" class="small"><strong>Total left:</strong> <span
+                     id="total_to_label">—</span></div>
+            </div>
+            <div id="progressWrap" style="margin:12px 0; display:none;">
+               <div style="font-size:13px;color:#333;margin-bottom:6px"><strong>Progress</strong> <span
+                     id="progressLabel" style="margin-left:8px;color:#555">0%</span></div>
+               <div style="background:#e6f4ea;border-radius:999px;height:12px;overflow:hidden">
+                  <div id="progressBar"
+                     style="height:100%;width:0%;background:#12a454;border-radius:999px;transition:width 400ms ease">
+                  </div>
+               </div>
+            </div>
+
+            <div id="markdown" aria-live="polite"></div>
+         </div>
+
+         <form id="labelForm" autocomplete="off">
+            <label class="small"><strong>Summary</strong></label>
+            <textarea id="summary" name="summary" placeholder="Write a concise summary..." required></textarea>
+
+            <div class="controls">
+               <button id="submitBtn" type="submit">Submit summary</button>
+               <button id="skipBtn" type="button" class="secondary">Skip</button>
+               <div style="margin-left:auto" id="feedback" class="small"></div>
+            </div>
+         </form>
+      </div>
+   </div>
+
+   <footer>
+      Interaction: GET /labelling/next → displays full markdown; POST /labelling {url, summary} → submit summary and
+      load next.
+   </footer>
+
+   <script>
+      const API_SERVER = 'http://localhost:5000';
+      const el = id => document.getElementById(id);
+
+      async function fetchNext() {
+         setLoading(true, 'Loading next item');
+         clearItem();
+
+         try {
+            const res = await fetch(API_SERVER + '/labelling/next', { cache: 'no-store' });
+            if (!res.ok) throw new Error('Failed to load next item: ' + res.status);
+
+            // Get raw text so we can handle encoding/strange characters reliably
+            let text = await res.text();
+            text = text.replace('NaN', 'null');
+
+            // Remove BOM if present
+            if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+            // Try normal parse first
+            let payload;
+            try {
+               payload = JSON.parse(text);
+            } catch (err) {
+               // Attempt to fix common issues: unescaped control chars, stray nul bytes
+               const cleaned = text
+                  .replace(/\0/g, '')                       // remove nulls
+                  .replace(/[\u0000-\u0019]+/g, ' ')        // collapse control characters except newline
+                  .replace(/\r\n/g, '\n');                  // normalize newlines
+
+               try {
+                  payload = JSON.parse(cleaned);
+               } catch (err2) {
+                  throw new Error('Invalid JSON from server after cleanup: ' + err2.message);
+               }
+            }
+
+            // If server returned JSON but with nested 'data' as string, try to parse it
+            if (payload && typeof payload.data === 'string') {
+               try { payload.data = JSON.parse(payload.data); } catch (e) { /* leave as string */ }
+            }
+
+            const data = payload.data || payload;
+            if (!data) throw new Error('Response JSON missing data field');
+
+            showItem(data, payload);
+            setLoading(false);
+         } catch (err) {
+            setLoading(false, 'Error: ' + err.message);
+            el('status').textContent = 'Error loading item: ' + err.message;
+            console.error(err);
+         }
+      }
+
+      function setLoading(isLoading, message) {
+         const statusEl = document.getElementById('status');
+         const spinner = document.getElementById('spinner');
+
+         if (statusEl) statusEl.textContent = message || (isLoading ? 'Loading' : 'Ready');
+
+         if (spinner) {
+            spinner.style.display = isLoading ? 'inline-block' : 'none';
+         }
+      }
+
+      function clearItem() {
+         el('item').style.display = 'none';
+         el('title').textContent = '';
+         el('link').textContent = '';
+         el('markdown').innerHTML = '';
+         el('summary').value = '';
+         el('tags').textContent = '';
+         el('total_to_label').textContent = '—';
+         el('feedback').textContent = '';
+      }
+
+      function showItem(data, fullPayload) {
+         if (!data) {
+            el('status').textContent = 'No data in response';
+            return;
+         }
+
+         el('item').style.display = 'block';
+         el('title').textContent = data.name || '(no title)';
+         el('link').textContent = data.data && data.data.link ? data.data.link : (data.link || '(no link)');
+         el('link').onclick = () => window.open(el('link').textContent, '_blank');
+
+         // show tags string if available
+         let tags = null;
+         if (data.data && data.data.tags) tags = data.data.tags;
+         else if (data.tags) tags = data.tags;
+         el('tags').textContent = tags || '—';
+
+         // show totals if present in full payload
+         if (fullPayload && typeof fullPayload.total_to_label !== 'undefined') {
+            el('total_to_label').textContent = fullPayload.total_to_label;
+         } else if (data.total_to_label !== undefined) {
+            el('total_to_label').textContent = data.total_to_label;
+         }
+
+         // Progress calculation
+         // 1) preferred: server provides total_with_markdown (initial total) and total_to_label (remaining)
+         // 2) fallback: server provides total and remaining or labelled_count
+         const pw = document.getElementById('progressWrap');
+         const pb = document.getElementById('progressBar');
+         const pl = document.getElementById('progressLabel');
+
+         let percent = 0;
+         let shown = false;
+
+         const remaining = (fullPayload && typeof fullPayload.total_to_label !== 'undefined') ? Number(fullPayload.total_to_label)
+            : (data.total_to_label !== undefined ? Number(data.total_to_label) : null);
+
+         const totalWithMarkdown = (fullPayload && typeof fullPayload.total_with_markdown !== 'undefined') ? Number(fullPayload.total_with_markdown)
+            : (data.total_with_markdown !== undefined ? Number(data.total_with_markdown) : null);
+
+         // alternative fields
+         const total = (fullPayload && typeof fullPayload.total !== 'undefined') ? Number(fullPayload.total)
+            : (data.total !== undefined ? Number(data.total) : null);
+
+         const done = (fullPayload && typeof fullPayload.done !== 'undefined') ? Number(fullPayload.done)
+            : (data.done !== undefined ? Number(data.done) : null);
+
+         if (totalWithMarkdown !== null && !Number.isNaN(totalWithMarkdown) && totalWithMarkdown > 0 && remaining !== null && !Number.isNaN(remaining)) {
+            const doneCount = Math.max(0, totalWithMarkdown - remaining);
+            percent = Math.round((doneCount / totalWithMarkdown) * 100);
+            shown = true;
+         } else if (total !== null && !Number.isNaN(total) && remaining !== null && !Number.isNaN(remaining) && total > 0) {
+            const doneCount = Math.max(0, total - remaining);
+            percent = Math.round((doneCount / total) * 100);
+            shown = true;
+         } else if (done !== null && total !== null && !Number.isNaN(done) && !Number.isNaN(total) && total > 0) {
+            percent = Math.round((Number(done) / Number(total)) * 100);
+            shown = true;
+         }
+
+         if (shown) {
+            if (pw) pw.style.display = 'block';
+            if (pb) pb.style.width = Math.min(100, Math.max(0, percent)) + '%';
+            if (pl) pl.textContent = (isFinite(percent) ? percent : 0) + '%';
+         } else {
+            if (pw) pw.style.display = 'none';
+         }
+
+         // Show raw markdown content (full markdown must be shown)
+         const md = (data.data && data.data.markdown) || data.markdown || '';
+         // render markdown safely
+         const html = marked.parse(md || '');
+         el('markdown').innerHTML = DOMPurify.sanitize(html);
+
+         // prefill summary maybe with provided summary field (if any)
+         el('summary').value = data.data && data.data.summary ? data.data.summary : '';
+
+         // attach current item url on form for submission
+         el('labelForm').dataset.url = (data.data && data.data.link) || data.link || '';
+      }
+
+      async function submitSummary(url, summary) {
+         setLoading(true, 'Submitting summary');
+         try {
+            const res = await fetch(API_SERVER + '/labelling/submit', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ url, summary })
+            });
+            if (!res.ok) {
+               const text = await res.text();
+               throw new Error('Server returned ' + res.status + ': ' + text);
+            }
+            const json = await res.json().catch(() => null);
+            el('feedback').textContent = 'Submitted';
+            setLoading(false, 'Submitted, loading next...');
+            // small delay so user sees feedback, then load next
+            setTimeout(fetchNext, 350);
+         } catch (err) {
+            setLoading(false);
+            el('feedback').textContent = 'Submit failed: ' + err.message;
+            console.error(err);
+         }
+      }
+
+      // form handlers
+      document.getElementById('labelForm').addEventListener('submit', function (e) {
+         e.preventDefault();
+         const url = this.dataset.url || '';
+         const summary = el('summary').value.trim();
+         if (!url) {
+            el('feedback').textContent = 'Missing URL, cannot submit';
+            return;
+         }
+         if (!summary) {
+            el('feedback').textContent = 'Please write a summary before submitting';
+            return;
+         }
+         submitSummary(url, summary);
+      });
+
+      document.getElementById('skipBtn').addEventListener('click', function () {
+         // Submit an empty summary with a "skipped" note
+         const url = el('labelForm').dataset.url || '';
+         if (!url) { el('feedback').textContent = 'No item to skip'; return; }
+         submitSummary(url, '__SKIPPED__');
+      });
+
+      // auto-load on page open
+      window.addEventListener('load', fetchNext);
+
+      // keyboard shortcut: Ctrl+Enter to submit
+      el('summary').addEventListener('keydown', function (e) {
+         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            document.getElementById('labelForm').dispatchEvent(new Event('submit', { cancelable: true }));
+         }
+      });
+   </script>
+</body>
+
+</html>
